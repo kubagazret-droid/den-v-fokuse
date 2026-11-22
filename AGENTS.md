@@ -28,3 +28,6 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+- Keep planner data in the existing browser store; derive the cross-date active list from it so both views stay synchronized.
+- Isolate opt-in Web Notifications and gesture-unlocked audio in a browser-only React hook; always preserve in-app reminders when system notifications fail.

@@ -2,6 +2,12 @@ export type Kind = "goal" | "task";
 export type Item = { id: string; kind: Kind; text: string; time?: string; done: boolean; notified?: boolean };
 export type Store = Record<string, Item[]>;
 
+export function activeItems(store: Store) {
+  return Object.entries(store)
+    .flatMap(([key, items]) => items.filter((item) => !item.done).map((item) => ({ key, item })))
+    .sort((a, b) => a.key.localeCompare(b.key) || (a.item.time || "99").localeCompare(b.item.time || "99"));
+}
+
 export const dateKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 

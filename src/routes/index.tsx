@@ -2,6 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Clock, Bell, Trash2, X, Plus } from "lucide-react";
 import { dateKey, shiftTime, type Item, type Kind, type Store } from "@/lib/planner";
+import { Button } from "@/components/ui/button";
+import { ActiveTasks } from "@/components/active-tasks";
+import { useReminderNotifications } from "@/hooks/use-reminder-notifications";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -29,6 +32,7 @@ function Index() {
   const [view, setView] = useState(() => new Date());
   const [postpone, setPostpone] = useState<{ key: string; item: Item } | null>(null);
   const [alerts, setAlerts] = useState<Item[]>([]);
+  const { permission, enabled, requesting, toggle, notify } = useReminderNotifications();
 
   useEffect(() => {
     try { setStore(JSON.parse(localStorage.getItem(KEY) || "{}")); } catch { /* ignore */ }
@@ -45,10 +49,11 @@ function Index() {
       const due = (store[k] || []).filter((i) => i.time && !i.done && !i.notified && i.time <= hm);
       if (!due.length) return;
       setAlerts((a) => [...a, ...due]);
+      due.forEach((item) => notify(item, k));
       setStore((s) => ({ ...s, [k]: (s[k] || []).map((i) => (due.some((d) => d.id === i.id) ? { ...i, notified: true } : i)) }));
     };
     tick(); const t = setInterval(tick, 15000); return () => clearInterval(t);
-  }, [store, loaded]);
+  }, [store, loaded, notify]);
 
   const key = dateKey(selected);
   const items = store[key] || [];
@@ -62,16 +67,35 @@ function Index() {
     if (dayOffset === 0) update(k, (l) => l.map((i) => (i.id === item.id ? moved : i)));
     else {
       const [y, m, d] = k.split("-").map(Number);
-      const nk = dateKey(new Date(y!, m! - 1, d! + dayOffset));
+      if (y === undefined || m === undefined || d === undefined) return;
+      const nk = dateKey(new Date(y, m - 1, d + dayOffset));
       setStore((s) => ({ ...s, [k]: (s[k] || []).filter((i) => i.id !== item.id), [nk]: [...(s[nk] || []), moved] }));
     }
     setPostpone(null);
   };
 
   return (
-    <main className="mx-auto min-h-screen max-w-xl px-4 pb-16 pt-5 font-sans">
-      <h1 className="mb-4 text-2xl font-bold tracking-tight">Ежедневник</h1>
-      <CalendarBar view={view} setView={setView} selected={selected} setSelected={setSelected} store={store} />
+    <main className="mx-auto min-h-screen max-w-xl px-4 pb-16 pt-5 font-sans lg:max-w-5xl">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">Ежедневник</h1>
+        <div className="flex flex-col items-start gap-1">
+          <Button variant={enabled ? "secondary" : "default"} onClick={() => void toggle()}
+            disabled={requesting || permission === "denied" || permission === "unsupported"}
+            className="min-h-11 rounded-xl" aria-pressed={enabled}>
+            <Bell />{requesting ? "Запрос разрешения…" : enabled ? "Выключить уведомления" : "Включить уведомления"}
+          </Button>
+          <p role="status" className="text-xs text-muted-foreground">
+            {permission === "unsupported" ? "Выключены · браузер не поддерживает" : permission === "denied" ? "Выключены · заблокированы в браузере" : enabled ? "Уведомления включены" : "Уведомления выключены"}
+          </p>
+        </div>
+      </div>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+        <CalendarBar view={view} setView={setView} selected={selected} setSelected={setSelected} store={store} />
+        <ActiveTasks store={store}
+          onComplete={(k, id) => update(k, (l) => l.map((i) => i.id === id ? { ...i, done: true } : i))}
+          onDelete={(k, id) => update(k, (l) => l.filter((i) => i.id !== id))} />
+      </div>
+      <div className="lg:max-w-[calc((100%-1rem)/1.8)]">
       <p className="mb-3 mt-6 text-sm text-muted-foreground">
         {selected.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
       </p>
@@ -83,6 +107,8 @@ function Index() {
             onDelete={(id) => update(key, (l) => l.filter((i) => i.id !== id))}
             onPostpone={(item) => setPostpone({ key, item })} />
         ))}
+      </div>
+
       </div>
 
       {postpone && <PostponeDialog item={postpone.item} onClose={() => setPostpone(null)} onSave={doPostpone} />}
